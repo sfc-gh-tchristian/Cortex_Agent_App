@@ -1602,53 +1602,115 @@ def reset_chat():
     st.session_state.response_times = []
 
 def ensure_valid_message_sequence():
-    """Ensure message sequence is valid for API (alternate user/assistant)."""
+    """Ensure message sequence is valid for API (alternate user/assistant) by combining consecutive messages."""
     if len(st.session_state.formatted_messages) > 0:
-        # Get unique messages while preserving order
-        unique_messages = []
-        seen = set()
+        # First pass: combine consecutive messages with the same role
+        combined_messages = []
+        current_group = []
         
         for msg in st.session_state.formatted_messages:
-            msg_signature = (msg.role, msg.content, msg.type)
-            if msg_signature not in seen:
-                seen.add(msg_signature)
-                unique_messages.append(msg)
-        
-        # Update with deduplicated list
-        st.session_state.formatted_messages = unique_messages
-        
-        # Validate and fix message alternation patterns
-        is_valid_sequence = True
-        last_role = None
-        
-        for msg in unique_messages:
-            if last_role == msg.role:
-                is_valid_sequence = False
-                break
-            last_role = msg.role
-        
-        if not is_valid_sequence:
-            # Recreate formatted_messages from display messages
-            display_messages = st.session_state.messages
-            new_formatted = []
-            
-            if display_messages:
-                last_role = None
-                for msg in display_messages:
-                    role = msg.get('role')
-                    # Skip consecutive messages with same role
-                    if role == last_role:
-                        continue
-                    
-                    formatted_msg = Message(
-                        role=role,
-                        content=msg.get('text', ''),
-                        msg_type=msg.get('type', 'text')
+            if not current_group or msg.role == current_group[0].role:
+                # Add to current group if roles match
+                current_group.append(msg)
+            else:
+                # Process the completed group
+                if current_group:
+                    # Create a combined message from the group
+                    combined_msg = Message(
+                        role=current_group[0].role,
+                        content="\n\n".join([m.content for m in current_group if m.content]),
+                        msg_type=current_group[0].type
                     )
-                    new_formatted.append(formatted_msg)
-                    last_role = role
                     
-                st.session_state.formatted_messages = new_formatted
+                    # For assistant messages, preserve all metadata from messages in the group
+                    if combined_msg.role == 'assistant':
+                        # Merge data properties from all messages in the group
+                        for prop in ['sql', 'searchResults', 'suggestions', 'viz_type']:
+                            for m in current_group:
+                                val = getattr(m, prop, None)
+                                if val is not None:
+                                    setattr(combined_msg, prop, val)
+                        
+                        # Take the most recent SQL DataFrame and visualization if available
+                        for m in reversed(current_group):
+                            if hasattr(m, 'sql_df') and m.sql_df is not None:
+                                combined_msg.sql_df = m.sql_df
+                            if hasattr(m, 'visualization') and m.visualization is not None:
+                                combined_msg.visualization = m.visualization
+                            if hasattr(m, 'message_index') and m.message_index is not None:
+                                combined_msg.message_index = m.message_index
+                                break
+                    
+                    combined_messages.append(combined_msg)
+                # Start a new group
+                current_group = [msg]
+        
+        # Add the last group if any
+        if current_group:
+            combined_msg = Message(
+                role=current_group[0].role,
+                content="\n\n".join([m.content for m in current_group if m.content]),
+                msg_type=current_group[0].type
+            )
+            
+            # For assistant messages, preserve metadata
+            if combined_msg.role == 'assistant':
+                for prop in ['sql', 'searchResults', 'suggestions', 'viz_type']:
+                    for m in current_group:
+                        val = getattr(m, prop, None)
+                        if val is not None:
+                            setattr(combined_msg, prop, val)
+                
+                # Take the most recent SQL DataFrame and visualization
+                for m in reversed(current_group):
+                    if hasattr(m, 'sql_df') and m.sql_df is not None:
+                        combined_msg.sql_df = m.sql_df
+                    if hasattr(m, 'visualization') and m.visualization is not None:
+                        combined_msg.visualization = m.visualization
+                    if hasattr(m, 'message_index') and m.message_index is not None:
+                        combined_msg.message_index = m.message_index
+                        break
+            
+            combined_messages.append(combined_msg)
+        
+        # Second pass: Ensure alternating roles (user/assistant/user...)
+        valid_sequence = []
+        expected_role = 'user'  # Start with user
+        
+        for msg in combined_messages:
+            if msg.role == expected_role:
+                valid_sequence.append(msg)
+                # Switch expected role
+                expected_role = 'assistant' if expected_role == 'user' else 'user'
+            elif not valid_sequence or valid_sequence[-1].role != msg.role:
+                # If we have an unexpected role but it doesn't cause consecutive same roles,
+                # we can still include it to preserve more of the conversation
+                valid_sequence.append(msg)
+                # Reset expected role based on what we just added
+                expected_role = 'assistant' if msg.role == 'user' else 'user'
+        
+        # Update the session state with our cleaned sequence
+        st.session_state.formatted_messages = valid_sequence
+        
+        # Also update display messages to match
+        st.session_state.messages = [msg.to_dict() for msg in valid_sequence]
+    
+    # If we have no messages, ensure we're ready to start with a user message
+    elif len(st.session_state.messages) > 0:
+        # Rebuild formatted_messages from display messages
+        st.session_state.formatted_messages = []
+        
+        expected_role = 'user'
+        for msg in st.session_state.messages:
+            role = msg.get('role')
+            if role == expected_role:
+                formatted_msg = Message(
+                    role=role,
+                    content=msg.get('text', ''),
+                    msg_type=msg.get('type', 'text')
+                )
+                st.session_state.formatted_messages.append(formatted_msg)
+                expected_role = 'assistant' if expected_role == 'user' else 'user'
 
 
 # ----- DIALOGS -----
@@ -2190,7 +2252,7 @@ def main():
                     role = message.get("role")
                     
                     # Determine avatar
-                    avatar = "👤" if role == "user" else "🤖" if role == 'assistant' else None
+                    avatar = "👤" if role == "user" else "❄️" if role == 'assistant' else None
                     
                     # Display message with appropriate styling
                     with st.chat_message(role, avatar=avatar):
