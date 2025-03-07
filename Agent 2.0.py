@@ -1343,7 +1343,7 @@ class UIComponents:
                 chart_container = st.container()
                 with chart_container:
                     if f"custom_chart_{message_index}" not in st.session_state:
-                        st.plotly_chart(message['visualization'], use_container_width=True)
+                        st.plotly_chart(message['visualization'], use_container_width=True, key=f"vis_chart_{message_index}")
                     else:
                         st.plotly_chart(st.session_state[f"custom_chart_{message_index}"], use_container_width=True)
                 
