@@ -229,7 +229,7 @@ class DataService:
                 .with_column('"Full Name"', concat_ws(lit('.'), col('"Database"'), col('"Schema"'), col('"Name"')))
             ).to_pandas()
             available_services['Active'] = False
-            available_services['Max Results'] = 1
+            available_services['Max Results'] = 3
             available_services = available_services[['Active','Name','Database','Schema','Max Results','Full Name']]
             return available_services
         except Exception as e:
