@@ -1735,7 +1735,7 @@ def manage_search_services():
             ).to_pandas()
             
             services['Active'] = False
-            services['Max Results'] = 1
+            services['Max Results'] = 3
             services = services[['Active','Name','Database','Schema','Max Results','Full Name']]
             st.session_state.search_services = services
         except Exception as e:
