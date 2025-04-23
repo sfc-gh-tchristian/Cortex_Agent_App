@@ -26,12 +26,15 @@ SERVICES = [
         "type": "search",
         "emoji": "🔍",
         "max_results": 3,
+        "description": "Search across the raw text of survey results" #optional
     },
     {
         "name": "Sales Data",
         "location": "LLM_DEMO.ANALYST.semantic/snowmobile_sales.yaml",
         "type": "analyst",
         "emoji": "📊",
+        "description": "Transctional data related to sales including dealerships and geo data." #optional
+    
     },
         #add/remove if required, using the format above for your tools
         #{
@@ -591,11 +594,13 @@ def main():
         
         # Dynamically render toggles for each service
         for service in SERVICES:
+            help_msg = service.get("description") or f"Tool type: {service['type']}"
             state.set_tool(
                 service["name"], 
                 st.toggle(
                     f"{service['emoji']} {service['name']}", 
-                    value=state.tool_enabled(service["name"])
+                    value=state.tool_enabled(service["name"]),
+                    help=help_msg
                 )
             )
         
