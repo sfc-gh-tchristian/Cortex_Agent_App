@@ -22,7 +22,7 @@ In the streamlit UI, add the CSS file into the directory
 ![image](https://github.com/user-attachments/assets/1e5ac1cd-6d5b-4fa7-af46-303e9e0ae83c)
 
 
-**Step Three:**
+**Step Four:**
 Use the config section of the app to add your Analyst / Search services where appropriate.
 They're now hard coded so a user doesn't have to select each time.
 
